@@ -25,5 +25,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
+          context: ./.docker/backup
+          file: ./.docker/backup/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/prestashop:latest
