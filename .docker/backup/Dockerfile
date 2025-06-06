@@ -9,6 +9,12 @@ RUN apt-get update && \
 COPY backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
-RUN echo "0 */6 * * * root /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/mysql-backup
+# Configurer cron pour exécuter la sauvegarde toutes les 6 heures
+RUN echo "0 */6 * * * /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/mysql-backup && \
+    chmod 0644 /etc/cron.d/mysql-backup && \
+    touch /var/log/cron.log
 
-CMD ["cron", "-f"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
