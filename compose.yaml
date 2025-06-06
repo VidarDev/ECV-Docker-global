@@ -1,0 +1,144 @@
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+  mysql_password:
+    file: ./secrets/mysql_password.txt
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password.txt
+
+services:
+  # Application
+  prestashop:
+    image: prestashop/prestashop:latest
+    container_name: prestashop
+    restart: unless-stopped
+    environment:
+      PS_INSTALL_AUTO: 1
+      PS_LANGUAGE: fr
+      PS_COUNTRY: fr
+      DB_SERVER: mysql
+      DB_NAME: prestashop
+      DB_USER: admin
+      PS_DOMAIN: localhost:8080
+      PS_ENABLE_SSL: 0
+    secrets:
+      - source: mysql_password
+        target: DB_PASSWORD
+    ports:
+      - "8080:80"
+    volumes:
+      - prestashop-data:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - frontend-network
+      - backend-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Base de données
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    user: "1000:1000"
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      MYSQL_DATABASE: prestashop
+      MYSQL_USER: admin
+    secrets:
+      - mysql_root_password
+      - mysql_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - backend-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "--password=$$(cat /run/secrets/mysql_root_password)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD_FILE: /run/secrets/mysql_root_password
+      PMA_PMADB: phpmyadmin
+    secrets:
+      - mysql_root_password
+    networks:
+      - backend-network
+      - frontend-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  backup:
+    build:
+      context: ./.docker/backup
+      dockerfile: Dockerfile
+    container_name: mysql-backup
+    restart: unless-stopped
+    volumes:
+      - mysql-data:/data/db:ro
+      - backup-data:/backup
+    secrets:
+      - mysql_root_password
+    networks:
+      - backend-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+    internal: true # Réseau interne non exposé
+  monitoring-network:
+    driver: bridge
+
+volumes:
+  prestashop-data:
+  mysql-data:
+  grafana-data:
+  backup-data:
+  prometheus-data:
